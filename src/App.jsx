@@ -86,33 +86,38 @@ const FormattedTextWithLinks = ({ html, className, as: Tag = 'div' }) => {
 
 // ── ContentModal ─────────────────────────────────────────────────────────────
 
+// Thin wrapper: mounts a fresh ContentModalForm — with fresh useState —
+// every time the modal opens for a different item (or for "new"). Keying on
+// item identity instead of syncing initialContent into state via an effect
+// avoids a one-render lag where a freshly (re)mounted RichTextEditor would
+// read the *previous* item's leftover state before the effect had a chance
+// to correct it (RichTextEditor only consumes `value` once, at mount, so
+// that stale read could never be undone afterwards). See git history for
+// the bug this replaced.
 const ContentModal = ({ isOpen, onClose, onSave, initialContent, sectionName, isSaving }) => {
-  const [title, setTitle]             = useState('');
-  const [description, setDescription] = useState('');
-  const [mainContent, setMainContent] = useState('');
+  if (!isOpen) return null;
+  return (
+    <ContentModalForm
+      key={initialContent?.id || 'new'}
+      onClose={onClose}
+      onSave={onSave}
+      initialContent={initialContent}
+      sectionName={sectionName}
+      isSaving={isSaving}
+    />
+  );
+};
+
+const ContentModalForm = ({ onClose, onSave, initialContent, sectionName, isSaving }) => {
+  const [title, setTitle]             = useState(initialContent?.title || '');
+  const [description, setDescription] = useState(initialContent?.description || '');
+  const [mainContent, setMainContent] = useState(initialContent?.mainContent || '');
   const [imageFile, setImageFile]     = useState(null);
-  const [imagePreviewUrl, setImagePreviewUrl] = useState('');
-  const [videoUrl, setVideoUrl]       = useState('');
-  const [downloadUrl, setDownloadUrl] = useState('');
+  const [imagePreviewUrl, setImagePreviewUrl] = useState(initialContent?.imageUrl || '');
+  const [videoUrl, setVideoUrl]       = useState(initialContent?.videoUrl || '');
+  const [downloadUrl, setDownloadUrl] = useState(initialContent?.downloadUrl || '');
   const [notification, setNotification] = useState(null);
   const objectUrlRef = useRef(null);
-
-  // Forces the three RichTextEditor instances to remount (fresh TipTap state)
-  // whenever the modal opens for a different item, instead of fighting their
-  // internal editor state with a controlled-value sync on every keystroke.
-  const editorKey = isOpen ? (initialContent?.id || 'new') : 'closed';
-
-  useEffect(() => {
-    if (!isOpen) return;
-    setTitle(initialContent?.title || '');
-    setDescription(initialContent?.description || '');
-    setMainContent(initialContent?.mainContent || '');
-    setImageFile(null);
-    setImagePreviewUrl(initialContent?.imageUrl || '');
-    setVideoUrl(initialContent?.videoUrl || '');
-    setDownloadUrl(initialContent?.downloadUrl || '');
-    setNotification(null);
-  }, [isOpen, initialContent]);
 
   useEffect(() => () => {
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
@@ -149,8 +154,6 @@ const ContentModal = ({ isOpen, onClose, onSave, initialContent, sectionName, is
     });
   };
 
-  if (!isOpen) return null;
-
   return (
     <div className="fixed inset-0 bg-slate-900/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-3xl shadow-2xl p-6 md:p-8 w-full max-w-4xl rtl flex flex-col max-h-[92vh] border border-slate-100">
@@ -177,17 +180,17 @@ const ContentModal = ({ isOpen, onClose, onSave, initialContent, sectionName, is
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="block text-slate-700 text-sm font-bold mb-2">العنوان:</label>
-              <RichTextEditor key={`title-${editorKey}`} value={title} onChange={setTitle}
+              <RichTextEditor value={title} onChange={setTitle}
                 placeholder="اكتب عنواناً جذاباً ومعبراً..." minHeight="3rem" />
             </div>
             <div>
               <label className="block text-slate-700 text-sm font-bold mb-2">موجز قصير (الوصف):</label>
-              <RichTextEditor key={`description-${editorKey}`} value={description} onChange={setDescription}
+              <RichTextEditor value={description} onChange={setDescription}
                 placeholder="ملخص سريع يظهر في مستعرض المنشورات..." minHeight="4rem" />
             </div>
             <div>
               <label className="block text-slate-700 text-sm font-bold mb-2">المحتوى الكامل (يدعم الروابط المباشرة):</label>
-              <RichTextEditor key={`main-${editorKey}`} value={mainContent} onChange={setMainContent}
+              <RichTextEditor value={mainContent} onChange={setMainContent}
                 placeholder="اكتب تفاصيل المحتوى هنا..." minHeight="10rem" />
             </div>
 
