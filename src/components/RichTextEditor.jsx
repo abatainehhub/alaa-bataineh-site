@@ -7,7 +7,7 @@ import {
   Bold, Italic, Underline as UnderlineIcon, List,
   AlignRight, AlignCenter, AlignLeft, AlignJustify,
 } from 'lucide-react';
-import { Direction } from '../lib/directionExtension';
+import { Direction } from '../lib/directionMark';
 
 const ALIGN_CYCLE = ['right', 'center', 'left', 'justify'];
 const ALIGN_ICONS = { right: AlignRight, center: AlignCenter, left: AlignLeft, justify: AlignJustify };
@@ -31,7 +31,8 @@ const Toolbar = ({ editor }) => {
 
   const currentAlign = ALIGN_CYCLE.find((a) => editor.isActive({ textAlign: a })) || 'right';
   const AlignIcon = ALIGN_ICONS[currentAlign];
-  const isRtl = (editor.getAttributes('paragraph').dir || editor.getAttributes('listItem').dir || 'rtl') === 'rtl';
+  const isLtrMarked = editor.isActive('direction', { dir: 'ltr' });
+  const isRtlMarked = editor.isActive('direction', { dir: 'rtl' });
 
   const cycleAlign = () => {
     const next = ALIGN_CYCLE[(ALIGN_CYCLE.indexOf(currentAlign) + 1) % ALIGN_CYCLE.length];
@@ -59,11 +60,18 @@ const Toolbar = ({ editor }) => {
         <AlignIcon size={16} />
       </ToolbarButton>
       <ToolbarButton
-        title="اتجاه الفقرة (RTL / LTR)"
-        active={false}
-        onClick={() => editor.chain().focus().toggleDirection().run()}
+        title="اتجاه النص المحدد: من اليسار لليمين (LTR)"
+        active={isLtrMarked}
+        onClick={() => editor.chain().focus().toggleDirectionMark('ltr').run()}
       >
-        <span className="text-[11px] font-black w-4 text-center inline-block">{isRtl ? 'RTL' : 'LTR'}</span>
+        <span className="text-[10px] font-black w-6 text-center inline-block">LTR</span>
+      </ToolbarButton>
+      <ToolbarButton
+        title="اتجاه النص المحدد: من اليمين لليسار (RTL)"
+        active={isRtlMarked}
+        onClick={() => editor.chain().focus().toggleDirectionMark('rtl').run()}
+      >
+        <span className="text-[10px] font-black w-6 text-center inline-block">RTL</span>
       </ToolbarButton>
 
       <span className="w-px h-5 bg-slate-300 mx-1" />

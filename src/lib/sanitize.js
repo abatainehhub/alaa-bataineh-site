@@ -10,7 +10,7 @@ import DOMPurify from 'dompurify';
 // - RENDER: WRITE's tags plus <a>, used only after we auto-linkify bare URLs
 //   in already-sanitized content for display (see linkifyHtml below).
 
-const WRITE_TAGS   = ['p', 'strong', 'em', 'u', 'ul', 'li', 'br'];
+const WRITE_TAGS   = ['p', 'strong', 'em', 'u', 'ul', 'li', 'br', 'span'];
 const RENDER_TAGS  = [...WRITE_TAGS, 'a'];
 const ALLOWED_ATTR = ['style', 'dir', 'href', 'target', 'rel'];
 
