@@ -6,6 +6,8 @@ import {
   ThumbsUp, Heart, ExternalLink, Download, Video,
 } from 'lucide-react';
 import { supabase } from './lib/supabase';
+import { RichTextEditor } from './components/RichTextEditor';
+import { sanitizeRichText, isRichTextEmpty, stripHtml, linkifyHtml } from './lib/sanitize';
 
 const DEFAULT_COVER = 'https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=1200&q=80';
 
@@ -61,7 +63,6 @@ const mapDbItem = (row) => ({
   imageUrl:    row.image_url,
   videoUrl:    row.video_url,
   downloadUrl: row.download_url,
-  textAlign:   row.text_align,
   sectionId:   row.section_id,
   views:       row.views,
   likes:       row.likes,
@@ -70,22 +71,16 @@ const mapDbItem = (row) => ({
 
 // ── FormattedTextWithLinks ───────────────────────────────────────────────────
 
-const FormattedTextWithLinks = ({ text, className }) => {
-  if (!text) return null;
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
-  const parts = text.split(urlRegex);
+// Renders sanitized rich-text HTML (bold/italic/underline/lists/alignment/
+// direction) and auto-links any bare URL left as plain text within it.
+const FormattedTextWithLinks = ({ html, className, as: Tag = 'div' }) => {
+  if (!html) return null;
   return (
-    <div className={`whitespace-pre-wrap ${className}`}>
-      {parts.map((part, i) =>
-        part.match(urlRegex) ? (
-          <a key={i} href={part} target="_blank" rel="noopener noreferrer"
-            className="text-indigo-600 underline hover:text-indigo-800 font-bold inline-flex items-center gap-1 mx-1"
-            onClick={(e) => e.stopPropagation()}>
-            <span>{part}</span><ExternalLink size={14} />
-          </a>
-        ) : part
-      )}
-    </div>
+    <Tag
+      className={`rich-content ${className || ''}`}
+      onClick={(e) => { if (e.target.closest('a')) e.stopPropagation(); }}
+      dangerouslySetInnerHTML={{ __html: linkifyHtml(html) }}
+    />
   );
 };
 
@@ -99,9 +94,13 @@ const ContentModal = ({ isOpen, onClose, onSave, initialContent, sectionName, is
   const [imagePreviewUrl, setImagePreviewUrl] = useState('');
   const [videoUrl, setVideoUrl]       = useState('');
   const [downloadUrl, setDownloadUrl] = useState('');
-  const [textAlign, setTextAlign]     = useState('right');
   const [notification, setNotification] = useState(null);
   const objectUrlRef = useRef(null);
+
+  // Forces the three RichTextEditor instances to remount (fresh TipTap state)
+  // whenever the modal opens for a different item, instead of fighting their
+  // internal editor state with a controlled-value sync on every keystroke.
+  const editorKey = isOpen ? (initialContent?.id || 'new') : 'closed';
 
   useEffect(() => {
     if (!isOpen) return;
@@ -112,7 +111,6 @@ const ContentModal = ({ isOpen, onClose, onSave, initialContent, sectionName, is
     setImagePreviewUrl(initialContent?.imageUrl || '');
     setVideoUrl(initialContent?.videoUrl || '');
     setDownloadUrl(initialContent?.downloadUrl || '');
-    setTextAlign(initialContent?.textAlign || 'right');
     setNotification(null);
   }, [isOpen, initialContent]);
 
@@ -132,20 +130,19 @@ const ContentModal = ({ isOpen, onClose, onSave, initialContent, sectionName, is
 
   const handleSubmit = (e) => {
     if (e?.preventDefault) e.preventDefault();
-    if (!title.trim() || !mainContent.trim()) {
-      setNotification({ type: 'error', message: 'الرجاء إدخال العنوان والمحتوى الكامل.' });
+    if (isRichTextEmpty(title) || isRichTextEmpty(description) || isRichTextEmpty(mainContent)) {
+      setNotification({ type: 'error', message: 'الرجاء إدخال العنوان والموجز والمحتوى الكامل.' });
       return;
     }
     onSave({
       id:          initialContent?.id || null,
-      title,
-      description,
-      mainContent,
+      title:       sanitizeRichText(title),
+      description: sanitizeRichText(description),
+      mainContent: sanitizeRichText(mainContent),
       imageFile,
       imageUrl:    imageFile ? null : (imagePreviewUrl || initialContent?.imageUrl || null),
       videoUrl,
       downloadUrl,
-      textAlign,
       views:       initialContent?.views  || 0,
       likes:       initialContent?.likes  || 0,
       hearts:      initialContent?.hearts || 0,
@@ -180,36 +177,18 @@ const ContentModal = ({ isOpen, onClose, onSave, initialContent, sectionName, is
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="block text-slate-700 text-sm font-bold mb-2">العنوان:</label>
-              <input type="text" value={title} onChange={(e) => setTitle(e.target.value)}
-                placeholder="اكتب عنواناً جذاباً ومعبراً..."
-                className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition font-semibold text-slate-800"
-                required />
+              <RichTextEditor key={`title-${editorKey}`} value={title} onChange={setTitle}
+                placeholder="اكتب عنواناً جذاباً ومعبراً..." minHeight="3rem" />
             </div>
             <div>
               <label className="block text-slate-700 text-sm font-bold mb-2">موجز قصير (الوصف):</label>
-              <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows="2"
-                placeholder="ملخص سريع يظهر في مستعرض المنشورات..."
-                className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition text-slate-600"
-                required />
+              <RichTextEditor key={`description-${editorKey}`} value={description} onChange={setDescription}
+                placeholder="ملخص سريع يظهر في مستعرض المنشورات..." minHeight="4rem" />
             </div>
             <div>
-              <div className="flex justify-between items-center mb-2">
-                <label className="block text-slate-700 text-sm font-bold">المحتوى الكامل (يدعم الروابط المباشرة):</label>
-                <div className="flex space-x-1 space-x-reverse bg-slate-100 p-1 rounded-xl">
-                  {['right', 'center', 'left', 'justify'].map((align) => (
-                    <button key={align} type="button" onClick={() => setTextAlign(align)}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold transition ${textAlign === align ? 'bg-indigo-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}`}>
-                      {align === 'right' ? 'يمين' : align === 'center' ? 'وسط' : align === 'left' ? 'يسار' : 'ضبط'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <textarea value={mainContent} onChange={(e) => setMainContent(e.target.value)} rows="6"
-                placeholder="اكتب تفاصيل المحتوى هنا..."
-                className={`w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition leading-relaxed text-slate-800 ${
-                  textAlign === 'left' ? 'text-left' : textAlign === 'center' ? 'text-center' : textAlign === 'justify' ? 'text-justify' : 'text-right'
-                }`}
-                required />
+              <label className="block text-slate-700 text-sm font-bold mb-2">المحتوى الكامل (يدعم الروابط المباشرة):</label>
+              <RichTextEditor key={`main-${editorKey}`} value={mainContent} onChange={setMainContent}
+                placeholder="اكتب تفاصيل المحتوى هنا..." minHeight="10rem" />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -330,11 +309,15 @@ const ArticleReaderModal = ({ isOpen, onClose, article, allArticles, onSelectArt
         </div>
 
         <div className="flex-grow overflow-y-auto p-6 sm:p-10 space-y-6">
-          <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight leading-tight">{article.title}</h1>
+          <FormattedTextWithLinks
+            as="h1"
+            html={article.title}
+            className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight leading-tight"
+          />
 
           {article.imageUrl && (
             <div className="rounded-2xl overflow-hidden shadow-lg border border-slate-100 my-4 max-h-[420px] bg-slate-100 flex items-center justify-center">
-              <img src={article.imageUrl} alt={article.title} className="w-full object-cover max-h-[420px]" />
+              <img src={article.imageUrl} alt={stripHtml(article.title)} className="w-full object-cover max-h-[420px]" />
             </div>
           )}
 
@@ -345,7 +328,7 @@ const ArticleReaderModal = ({ isOpen, onClose, article, allArticles, onSelectArt
               </h3>
               {embedUrl ? (
                 <div className="relative w-full aspect-video rounded-2xl overflow-hidden shadow-xl border border-slate-200 bg-black">
-                  <iframe src={embedUrl} title={article.title} className="w-full h-full" allowFullScreen />
+                  <iframe src={embedUrl} title={stripHtml(article.title)} className="w-full h-full" allowFullScreen />
                 </div>
               ) : (
                 <div className="p-4 bg-indigo-50 rounded-2xl flex items-center justify-between border border-indigo-100">
@@ -371,15 +354,13 @@ const ArticleReaderModal = ({ isOpen, onClose, article, allArticles, onSelectArt
           )}
 
           <div className="p-5 bg-indigo-50/50 border-r-4 border-indigo-600 rounded-2xl text-slate-700 font-bold text-base sm:text-lg leading-relaxed">
-            <FormattedTextWithLinks text={article.description} />
+            <FormattedTextWithLinks html={article.description} />
           </div>
 
           <div className="pt-4 border-t border-slate-100">
             <FormattedTextWithLinks
-              text={article.mainContent}
-              className={`text-slate-800 leading-loose text-lg sm:text-xl font-normal ${
-                article.textAlign === 'left' ? 'text-left' : article.textAlign === 'center' ? 'text-center' : article.textAlign === 'justify' ? 'text-justify' : 'text-right'
-              }`}
+              html={article.mainContent}
+              className="text-slate-800 leading-loose text-lg sm:text-xl font-normal"
             />
           </div>
 
@@ -471,9 +452,9 @@ const App = () => {
 
   // ── Derived lists ─────────────────────────────────────────
   const filteredItems = currentItems.filter(item =>
-    item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.mainContent.toLowerCase().includes(searchQuery.toLowerCase())
+    stripHtml(item.title).toLowerCase().includes(searchQuery.toLowerCase()) ||
+    stripHtml(item.description).toLowerCase().includes(searchQuery.toLowerCase()) ||
+    stripHtml(item.mainContent).toLowerCase().includes(searchQuery.toLowerCase())
   );
   const totalPages     = Math.max(1, Math.ceil(filteredItems.length / ITEMS_PER_PAGE));
   const paginatedItems = filteredItems.slice(
@@ -619,7 +600,6 @@ const App = () => {
         image_url:    imageUrl || null,
         video_url:    newItem.videoUrl   || null,
         download_url: newItem.downloadUrl || null,
-        text_align:   newItem.textAlign,
         section_id:   activeSectionId,
         views:        newItem.views  || 0,
         likes:        newItem.likes  || 0,
@@ -948,12 +928,12 @@ const App = () => {
                                 </div>
                               )}
                             </div>
-                            <h4 className="text-xl font-black text-slate-900 tracking-tight mb-2 group-hover:text-indigo-600 transition">{item.title}</h4>
-                            <p className="text-slate-600 text-sm font-medium mb-4 leading-relaxed line-clamp-3">{item.description}</p>
+                            <h4 className="text-xl font-black text-slate-900 tracking-tight mb-2 group-hover:text-indigo-600 transition">{stripHtml(item.title)}</h4>
+                            <p className="text-slate-600 text-sm font-medium mb-4 leading-relaxed line-clamp-3">{stripHtml(item.description)}</p>
                           </div>
                           {item.imageUrl && (
                             <div className="mb-4 h-40 overflow-hidden rounded-2xl bg-slate-100 border border-slate-100">
-                              <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
+                              <img src={item.imageUrl} alt={stripHtml(item.title)} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
                             </div>
                           )}
                           <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-indigo-600 font-bold text-sm">

@@ -4,6 +4,9 @@
 -- ============================================================
 
 -- ── Content items ────────────────────────────────────────────
+-- title/description/main_content store sanitized rich-text HTML
+-- (produced by the TipTap editor, allow-listed via DOMPurify) —
+-- not plain text. See src/lib/sanitize.js.
 CREATE TABLE IF NOT EXISTS content_items (
   id           uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   title        text        NOT NULL,
@@ -12,7 +15,6 @@ CREATE TABLE IF NOT EXISTS content_items (
   image_url    text,
   video_url    text,
   download_url text,
-  text_align   text        NOT NULL DEFAULT 'right',
   section_id   text        NOT NULL,
   views        integer     NOT NULL DEFAULT 0,
   likes        integer     NOT NULL DEFAULT 0,

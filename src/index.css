@@ -5,3 +5,44 @@
 @tailwind utilities;
 
 * { font-family: 'Cairo', sans-serif; }
+
+/* ── Rich text editor (TipTap) ──────────────────────────────────────────── */
+
+.rich-editor-content .ProseMirror {
+  outline: none;
+  min-height: inherit;
+}
+.rich-editor-content .ProseMirror p { margin: 0 0 0.5em; }
+.rich-editor-content .ProseMirror p:last-child { margin-bottom: 0; }
+.rich-editor-content .ProseMirror ul {
+  list-style: disc;
+  padding-inline-start: 1.5em;
+  margin: 0 0 0.5em;
+}
+.rich-editor-content .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: right;
+  color: #94a3b8;
+  pointer-events: none;
+  height: 0;
+}
+
+/* ── Rich text rendering (article view) ─────────────────────────────────── */
+
+.rich-content p { margin: 0 0 0.75em; }
+.rich-content p:last-child { margin-bottom: 0; }
+.rich-content ul {
+  list-style: disc;
+  padding-inline-start: 1.5em;
+  margin: 0 0 0.75em;
+}
+.rich-content .rich-link {
+  color: #4f46e5;
+  text-decoration: underline;
+  font-weight: 700;
+}
+.rich-content .rich-link::after {
+  content: '↗';
+  display: inline-block;
+  margin-inline-start: 0.15em;
+}
