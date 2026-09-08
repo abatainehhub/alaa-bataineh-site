@@ -3,7 +3,7 @@ import {
   BookOpen, Search, GraduationCap, MessageSquare, Calendar, Phone,
   Plus, Edit, Trash2, X, Settings, ChevronRight, ChevronLeft, ArrowRight,
   CheckCircle2, AlertCircle, Bookmark, Layers, Home, Info, Eye,
-  ThumbsUp, Heart, ExternalLink, Download, Video,
+  ThumbsUp, Heart, ExternalLink, Download, Video, Sparkles,
 } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import { RichTextEditor } from './components/RichTextEditor';
@@ -117,11 +117,46 @@ const ContentModalForm = ({ onClose, onSave, initialContent, sectionName, isSavi
   const [videoUrl, setVideoUrl]       = useState(initialContent?.videoUrl || '');
   const [downloadUrl, setDownloadUrl] = useState(initialContent?.downloadUrl || '');
   const [notification, setNotification] = useState(null);
+  const [aiLoadingType, setAiLoadingType] = useState(null); // null | 'summarize' | 'suggest'
   const objectUrlRef = useRef(null);
+  const mainContentEditorRef = useRef(null);
 
   useEffect(() => () => {
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
   }, []);
+
+  const handleAIAction = async (type) => {
+    if (aiLoadingType) return;
+    const plainText = stripHtml(mainContent);
+    if (!plainText.trim()) {
+      setNotification({ type: 'error', message: 'الرجاء كتابة بعض المحتوى أولاً قبل استخدام الذكاء الاصطناعي.' });
+      return;
+    }
+    setAiLoadingType(type);
+    setNotification(null);
+    try {
+      const response = await fetch('/api/ai-assist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, text: plainText }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.status === 429 || data.error === 'rate_limited') {
+        setNotification({ type: 'error', message: 'الخدمة مشغولة حالياً، الرجاء الانتظار قليلاً والمحاولة مرة أخرى.' });
+        return;
+      }
+      if (!response.ok || !data.text) {
+        setNotification({ type: 'error', message: 'تعذّر توليد المحتوى، الرجاء المحاولة مرة أخرى.' });
+        return;
+      }
+      mainContentEditorRef.current?.insertContent(sanitizeRichText(data.text));
+    } catch (err) {
+      console.error('AI assist error:', err);
+      setNotification({ type: 'error', message: 'تعذّر الاتصال بخدمة الذكاء الاصطناعي، الرجاء المحاولة مرة أخرى.' });
+    } finally {
+      setAiLoadingType(null);
+    }
+  };
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -190,8 +225,20 @@ const ContentModalForm = ({ onClose, onSave, initialContent, sectionName, isSavi
             </div>
             <div>
               <label className="block text-slate-700 text-sm font-bold mb-2">المحتوى الكامل (يدعم الروابط المباشرة):</label>
-              <RichTextEditor value={mainContent} onChange={setMainContent}
+              <RichTextEditor ref={mainContentEditorRef} value={mainContent} onChange={setMainContent}
                 placeholder="اكتب تفاصيل المحتوى هنا..." minHeight="10rem" />
+              <div className="flex flex-wrap gap-2 mt-2">
+                <button type="button" disabled={!!aiLoadingType} onClick={() => handleAIAction('summarize')}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-violet-50 text-violet-700 rounded-xl text-xs font-bold hover:bg-violet-100 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                  <Sparkles size={14} />
+                  <span>{aiLoadingType === 'summarize' ? 'جارِ التلخيص...' : 'تلخيص بالذكاء الاصطناعي'}</span>
+                </button>
+                <button type="button" disabled={!!aiLoadingType} onClick={() => handleAIAction('suggest')}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-violet-50 text-violet-700 rounded-xl text-xs font-bold hover:bg-violet-100 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                  <Sparkles size={14} />
+                  <span>{aiLoadingType === 'suggest' ? 'جارِ التوليد...' : 'توليد محتوى متقدم'}</span>
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { forwardRef, useImperativeHandle } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import TextAlign from '@tiptap/extension-text-align';
@@ -89,7 +89,12 @@ const Toolbar = ({ editor }) => {
 // the field should be reloaded from `value` (e.g. modal opens for a
 // different item) — remounting is far safer than fighting TipTap's internal
 // state with a controlled-value sync on every keystroke.
-export const RichTextEditor = ({ value, onChange, placeholder, minHeight = '6rem' }) => {
+//
+// Exposes `insertContent(html)` via ref for callers that need to inject
+// content programmatically (e.g. the AI-assist buttons) without going
+// through the value/onChange loop, which this component never re-reads
+// from after mount.
+export const RichTextEditor = forwardRef(({ value, onChange, placeholder, minHeight = '6rem' }, ref) => {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -110,6 +115,10 @@ export const RichTextEditor = ({ value, onChange, placeholder, minHeight = '6rem
     onUpdate: ({ editor: e }) => onChange(e.getHTML()),
   });
 
+  useImperativeHandle(ref, () => ({
+    insertContent: (html) => editor?.chain().focus().insertContent(html).run(),
+  }), [editor]);
+
   return (
     <div dir="rtl">
       <Toolbar editor={editor} />
@@ -120,4 +129,5 @@ export const RichTextEditor = ({ value, onChange, placeholder, minHeight = '6rem
       />
     </div>
   );
-};
+});
+RichTextEditor.displayName = 'RichTextEditor';
