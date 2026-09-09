@@ -757,7 +757,7 @@ const App = () => {
               <div className="inline-block p-3 rounded-2xl bg-indigo-600/20 text-indigo-400 mb-3 border border-indigo-500/30 shadow-inner">
                 <Bookmark size={30} className="animate-pulse" />
               </div>
-              <h1 className="text-2xl font-black tracking-tight text-white">مدونة الاقتصاد السلوكي والإسلامي</h1>
+              <h1 className="text-2xl font-black tracking-tight text-white">درب للاقتصاد السلوكي والإسلامي</h1>
               <p className="text-xs text-indigo-300 mt-1 font-semibold uppercase tracking-widest">الأرشيف العلمي والمقالات</p>
             </div>
 
