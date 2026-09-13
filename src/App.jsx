@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   BookOpen, Search, GraduationCap, MessageSquare, Calendar, Phone,
   Plus, Edit, Trash2, X, Settings, ChevronRight, ChevronLeft, ArrowRight,
@@ -485,6 +486,9 @@ const App = () => {
   const coverSaveTimer = useRef(null);
 
   // ── Navigation ────────────────────────────────────────────
+  const { id: routeArticleId } = useParams();
+  const navigate = useNavigate();
+  const defaultTitleRef = useRef(document.title);
   const [activeSectionId,  setActiveSectionId]  = useState('home');
   const [searchQuery,      setSearchQuery]       = useState('');
   const [currentPage,      setCurrentPage]       = useState(1);
@@ -679,6 +683,7 @@ const App = () => {
 
   const handleOpenArticle = async (item) => {
     setSelectedArticle(item);
+    navigate(`/article/${item.id}`);
 
     // Navigate to the correct page
     const idx = filteredItems.findIndex(a => a.id === item.id);
@@ -692,6 +697,60 @@ const App = () => {
       setSelectedArticle(updated);
     }
   };
+
+  // Direct link / shared URL: /article/:id was hit first (or reloaded), so
+  // there's no selectedArticle yet — fetch that one article by id directly
+  // (independent of whichever section happens to be active), point the
+  // sidebar at its real section, then open it through the exact same
+  // handleOpenArticle path a normal click uses (same view-count increment,
+  // same prev/next behavior once that section's list loads).
+  //
+  // Guarded by `selectedArticle?.id === routeArticleId`: a normal in-app
+  // click already opens the article AND updates the URL itself, which
+  // would otherwise re-trigger this effect and double-count the view.
+  useEffect(() => {
+    if (!routeArticleId || !isAuthReady) return;
+    if (selectedArticle?.id === routeArticleId) return;
+
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('content_items')
+        .select('*')
+        .eq('id', routeArticleId)
+        .single();
+
+      if (cancelled) return;
+      if (error || !data) {
+        navigate('/', { replace: true });
+        return;
+      }
+
+      const item = mapDbItem(data);
+      if (item.sectionId !== activeSectionId) setActiveSectionId(item.sectionId);
+      handleOpenArticle(item);
+    })();
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeArticleId, isAuthReady]);
+
+  // Browser back/forward away from an article (URL no longer has an :id)
+  // should close the reader without re-navigating (avoids a loop with the
+  // effect above).
+  useEffect(() => {
+    if (!routeArticleId && selectedArticle) setSelectedArticle(null);
+  }, [routeArticleId]);
+
+  // The middleware-injected <title> only covers the initial HTML response
+  // for a direct/shared link — once the SPA has booted, moving between
+  // articles via prev/next is pure client-side routing, so the tab title
+  // has to be kept in sync here too.
+  useEffect(() => {
+    document.title = selectedArticle
+      ? `${stripHtml(selectedArticle.title)} | درب للاقتصاد السلوكي والإسلامي`
+      : defaultTitleRef.current;
+  }, [selectedArticle]);
 
   const handleReaction = async (item, type) => {
     if (!item.id) return;
@@ -1067,7 +1126,7 @@ const App = () => {
 
       <ArticleReaderModal
         isOpen={Boolean(selectedArticle)}
-        onClose={() => setSelectedArticle(null)}
+        onClose={() => { setSelectedArticle(null); navigate('/'); }}
         article={selectedArticle}
         allArticles={filteredItems}
         onSelectArticle={handleOpenArticle}
